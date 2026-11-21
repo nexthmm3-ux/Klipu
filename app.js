@@ -1,4 +1,5 @@
 import { site } from './site.js';
+import { CATALOG } from './controls.js';
 const $ = (id) => document.getElementById(id);
 const state = { file: null, duration: 0, segs: [], clips: [], slots: [], busy: false };
 
@@ -985,7 +986,7 @@ async function cutAll() {
 /* ---------- the whole job ---------- */
 async function runAll() {
   if (!state.file || state.busy) return;
-  state.busy = true;
+  state.busy = true; site.bump('video'); site.setWorking(true);
   const N = +$('count').value, L = +$('len').value;
   $('errTxt').hidden = true; $('back').hidden = true;
   const pv = $('pv'); pv.pause(); pv.hidden = true; pv.removeAttribute('src');
@@ -1007,9 +1008,10 @@ async function runAll() {
     $('stepLabel').textContent = 'Step 2 of 2 · Cutting the clips';
     await cutAll();
     summary();
+    site.bump('clip', document.querySelectorAll('.slot.done').length);
     site.askReview();
   } catch (e) { $('stepLabel').textContent = 'Stopped'; showErr(e); }
-  finally { state.busy = false; stopTimer(); keepAwake(false); }
+  finally { state.busy = false; site.setWorking(false); stopTimer(); keepAwake(false); }
 }
 async function retrySlot(i) {
   if (state.busy) return;
@@ -1343,4 +1345,22 @@ const game = (() => {
     },
     stop() { wantRun = false; post({ t: 'stop' }); }
   };
+})();
+
+/* ---------- things the owner has switched off (the owner still sees everything) ---------- */
+(async function applyLocks() {
+  const [st] = await Promise.all([site.settings, site.ready]);
+  if (await site.checkOwner()) return;
+  for (const g of CATALOG) {
+    const off = (st.disabled && st.disabled[g.key]) || []; if (!off.length) continue;
+    if (g.kind === 'select') {
+      const sel = $(g.id);
+      [...sel.options].forEach((o) => { if (off.includes(o.value)) o.remove(); });
+      if (off.includes(sel.value) && sel.options.length) { sel.selectedIndex = 0; sel.dispatchEvent(new Event('change')); }
+    } else {
+      const cards = [...$(g.box).querySelectorAll('.card')], input = $(g.input);
+      g.items.forEach(([val], i) => { if (off.includes(val) && cards[i]) cards[i].hidden = true; });
+      if (off.includes(input.value)) { const first = cards.find((c) => !c.hidden); if (first) first.click(); }
+    }
+  }
 })();

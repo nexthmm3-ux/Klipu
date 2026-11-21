@@ -1,0 +1,67 @@
+<!doctype html>
+<html lang="en" data-theme="dark">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Reviews · Klipu</title>
+<meta name="description" content="Read what people say about Klipu and leave your own rating.">
+<meta name="theme-color" content="#07080d">
+<link rel="icon" type="image/png" href="favicon.png">
+<link rel="apple-touch-icon" href="icon-192.png">
+<link rel="manifest" href="manifest.webmanifest">
+<script>try{var t=localStorage.getItem('klipu:theme');if(t)document.documentElement.dataset.theme=t}catch(e){}</script>
+<link rel="stylesheet" href="site.css">
+</head>
+<body data-page="reviews">
+<main class="pg">
+  <h1>Reviews</h1>
+  <p class="lede">Real ratings from people who used Klipu. Only signed-in members can write one, and each person has one review that they can edit or delete.</p>
+  <div id="local" class="setup-note" hidden><b>Reviews are not shared yet.</b> Until the site owner switches on login, a review you write is saved only on this device and nobody else sees it.</div>
+  <div class="rv-sum" id="sum" hidden><div class="rv-avg"><span id="avg">0</span><small id="cnt"></small></div><div class="rv-dist" id="dist"></div></div>
+  <section class="rv-form" id="form" aria-labelledby="fh">
+    <h2 id="fh">Your review</h2>
+    <div class="stars" id="stars" role="radiogroup" aria-label="Rating"></div>
+    <textarea id="text" rows="4" maxlength="500" placeholder="What did you use Klipu for? What worked, what did not?" aria-label="Your comment"></textarea>
+    <div class="errbox" id="err" role="alert"></div><div class="okbox" id="ok" hidden></div>
+    <div class="rv-row"><button class="primary" id="send" type="button">Send review</button><button class="ghost" id="del" type="button" hidden>Delete mine</button></div>
+    <div id="needLogin" class="note" hidden>You need to <a href="login.html?next=reviews.html" style="color:var(--accent-ink)">log in</a> to write a review.</div>
+  </section>
+  <div class="rv-list" id="list" aria-live="polite"><div class="rv-empty">Loading…</div></div>
+</main>
+<script type="module">
+import { site } from './site.js';
+const $ = (id) => document.getElementById(id);
+let rate = 0, mine = null;
+$('stars').innerHTML = [1,2,3,4,5].map((n) => `<button type="button" role="radio" aria-checked="false" data-n="${n}" aria-label="${n} star${n>1?'s':''}">★</button>`).join('');
+const paint = () => $('stars').querySelectorAll('button').forEach((b) => { b.classList.toggle('on', +b.dataset.n <= rate); b.setAttribute('aria-checked', String(+b.dataset.n === rate)); });
+$('stars').onclick = (e) => { const b = e.target.closest('button'); if (b) { rate = +b.dataset.n; paint(); } };
+const when = (t) => t ? new Date(t).toLocaleDateString(undefined, { year: 'numeric', month: 'short', day: 'numeric' }) : '';
+if (!site.reviews.shared) $('local').hidden = false;
+async function load() {
+  let list = [];
+  try { list = await site.reviews.list(); mine = await site.reviews.mine(); }
+  catch (e) { $('list').innerHTML = '<div class="rv-empty">Could not load reviews. Check your internet and reload.</div>'; return; }
+  if (mine) { rate = mine.rating; $('text').value = mine.text || ''; $('send').textContent = 'Update review'; $('del').hidden = false; paint(); }
+  const n = list.length, avg = n ? list.reduce((s, r) => s + r.rating, 0) / n : 0;
+  $('sum').hidden = !n;
+  if (n) {
+    $('avg').textContent = avg.toFixed(1); $('cnt').textContent = n + (site.reviews.shared ? ' latest review' : ' review') + (n > 1 ? 's' : '');
+    $('dist').innerHTML = [5,4,3,2,1].map((s) => { const c = list.filter((r) => r.rating === s).length; return `<div><span>${s}</span><i><b style="width:${Math.round(c / n * 100)}%"></b></i><span>${c}</span></div>`; }).join('');
+  }
+  const own = site.reviews.isOwner();
+  $('list').innerHTML = n ? list.map((r) => `<article class="rv-item"><div class="top"><b>${site.esc(r.name || 'Member')}</b><span class="st" aria-label="${r.rating} of 5 stars">${'★'.repeat(r.rating)}${'☆'.repeat(5 - r.rating)}</span></div><div class="when">${when(r.at)}</div>${r.text ? `<p>${site.esc(r.text)}</p>` : ''}${own && r.uid !== (site.user && site.user.uid) ? `<button class="ghost del" data-id="${site.esc(r.id)}" type="button">Delete (owner)</button>` : ''}</article>`).join('')
+    : '<div class="rv-empty">No reviews yet. Be the first to write one.</div>';
+}
+$('list').onclick = async (e) => { const b = e.target.closest('.del'); if (!b || !confirm('Delete this review?')) return; try { await site.reviews.remove(b.dataset.id); load(); } catch (x) { fail('Could not delete.'); } };
+const fail = (m) => { $('ok').hidden = true; $('err').textContent = m; $('err').classList.add('on'); };
+$('send').onclick = async () => {
+  $('err').classList.remove('on'); $('ok').hidden = true;
+  try { await site.reviews.save(rate, $('text').value); $('ok').textContent = 'Thank you! Your review is saved.'; $('ok').hidden = false; load(); }
+  catch (e) { fail(e.message); }
+};
+$('del').onclick = async () => { if (!confirm('Delete your review?')) return; try { await site.reviews.remove(site.configured ? site.user.uid : 'local'); rate = 0; $('text').value = ''; $('send').textContent = 'Send review'; $('del').hidden = true; paint(); load(); } catch (e) { fail('Could not delete.'); } };
+site.ready.then(() => site.checkOwner()).then(() => { $('needLogin').hidden = !(site.configured && !site.user); load(); });
+site.onUser(() => { $('needLogin').hidden = !(site.configured && !site.user); });
+</script>
+</body>
+</html>

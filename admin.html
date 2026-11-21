@@ -1,0 +1,70 @@
+<!doctype html>
+<html lang="en" data-theme="dark">
+<head>
+<meta charset="utf-8">
+<meta name="robots" content="noindex,nofollow">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Owner · Klipu</title>
+<meta name="description" content="Choose a video and let Klipu cut captioned clips.">
+<meta name="theme-color" content="#07080d">
+<link rel="icon" type="image/png" href="favicon.png">
+<link rel="apple-touch-icon" href="icon-192.png">
+<link rel="manifest" href="manifest.webmanifest">
+<script>try{var t=localStorage.getItem('klipu:theme');if(t)document.documentElement.dataset.theme=t}catch(e){}</script>
+<link rel="stylesheet" href="site.css">
+</head>
+<body data-page="admin">
+<main class="pg" id="root"><p class="lede">Loading…</p></main>
+<script type="module">
+import { site } from './site.js';
+import { CATALOG } from './controls.js';
+const root = document.getElementById('root'), esc = site.esc;
+const closed = (m) => { root.innerHTML = `<h1>Not available</h1><p class="lede">${m}</p><a class="ghost" href="index.html">Go home</a>`; };
+await site.ready;
+if (!site.configured) closed('This page is not available.');
+else if (!site.user) { root.innerHTML = '<h1>Owner</h1><p class="lede">Log in to continue.</p><a class="primary" href="login.html?next=admin.html">Log in</a>'; }
+else if (!(await site.checkOwner())) closed('This page is not available.');
+else start();
+
+async function start() {
+  const st = await site.settings;
+  const off = JSON.parse(JSON.stringify(st.disabled || {}));
+  root.innerHTML = `<h1>Owner panel</h1><p class="lede">Only you can see this. Visitors never see it, and switches here change what they can pick in the app. You always see everything.</p>
+  <section class="ad-card"><h2>Online now</h2><p class="sub">People with a Klipu page open right now.</p><div class="ad-big" id="live">0</div><p class="sub" id="liveSub" style="margin-top:8px"></p></section>
+  <section class="ad-card"><h2>Numbers</h2><p class="sub">Per day (UTC). Visits count once per browser per day.</p><div id="stats">Loading…</div></section>
+  <section class="ad-card"><h2>Announcement bar</h2><p class="sub">A line shown at the top of every page. Leave empty for none.</p><textarea id="ann" rows="2" maxlength="200" placeholder="For example: New caption styles are coming this week."></textarea></section>
+  <section class="ad-card"><h2>Switches</h2><p class="sub">Untick to hide something from visitors. At least one choice must stay on in each group.</p><div id="sw"></div></section>
+  <div class="ad-sticky"><button class="primary" id="save" type="button">Save changes</button><span id="msg" class="note"></span></div>`;
+  document.getElementById('ann').value = st.announce || '';
+  const sw = document.getElementById('sw');
+  sw.innerHTML = CATALOG.map((g) => `<h3 style="margin:14px 0 8px;font:600 14px var(--display)">${esc(g.label)}</h3>` + g.items.map(([v, l]) => `<div class="ad-sw${(off[g.key] || []).includes(v) ? ' off' : ''}"><label><input type="checkbox" data-g="${g.key}" data-v="${esc(v)}" ${(off[g.key] || []).includes(v) ? '' : 'checked'}><span>${esc(l)}</span></label></div>`).join('')).join('');
+  sw.onchange = (e) => {
+    const i = e.target; if (!i.dataset.g) return;
+    const g = i.dataset.g; const set = new Set(off[g] || []);
+    if (i.checked) set.delete(i.dataset.v); else set.add(i.dataset.v);
+    const total = CATALOG.find((x) => x.key === g).items.length;
+    if (set.size >= total) { i.checked = true; set.delete(i.dataset.v); document.getElementById('msg').textContent = 'At least one choice must stay on.'; }
+    off[g] = [...set]; i.closest('.ad-sw').classList.toggle('off', !i.checked);
+  };
+  document.getElementById('save').onclick = async () => {
+    const m = document.getElementById('msg'); m.textContent = 'Saving…';
+    const clean = {}; for (const k in off) if (off[k].length) clean[k] = off[k];
+    try { await site.owned.saveSettings(clean, document.getElementById('ann').value.trim()); m.textContent = 'Saved. Visitors see it on their next page load.'; }
+    catch (e) { m.textContent = e.message; }
+  };
+  site.watchLive((state) => {
+    let n = 0, working = 0; const pages = {};
+    for (const k in state) { const p = state[k][0] || {}; if (p.page === 'admin') continue; n++; if (p.working) working++; pages[p.page] = (pages[p.page] || 0) + 1; }
+    document.getElementById('live').textContent = n;
+    document.getElementById('liveSub').textContent = n ? working + ' making clips · ' + Object.entries(pages).map(([a, b]) => a + ' ' + b).join(' · ') : 'Nobody right now.';
+  });
+  try {
+    const rows = await site.owned.stats(); const days = {};
+    rows.forEach((r) => { (days[r.day] = days[r.day] || {})[r.kind] = r.n; });
+    const ds = Object.keys(days).sort().reverse().slice(0, 14);
+    document.getElementById('stats').innerHTML = ds.length ? `<table class="ad-tbl"><tr><th>Day</th><th>Visits</th><th>Videos</th><th>Clips</th></tr>${ds.map((d) => `<tr><td>${esc(d)}</td><td>${days[d].visit || 0}</td><td>${days[d].video || 0}</td><td>${days[d].clip || 0}</td></tr>`).join('')}</table>` : 'No numbers yet.';
+  } catch (e) { document.getElementById('stats').textContent = e.message; }
+}
+</script>
+</body>
+</html>

@@ -80,8 +80,67 @@ const reviews = {
     if (!configured) { safe(() => localStorage.removeItem(LKEY)); return; }
     const c = await sb(); const { error } = await c.from('reviews').delete().eq('user_id', id); if (error) throw error;
   },
-  isOwner: () => !!(user && OWNER_EMAIL && user.email && user.email.toLowerCase() === OWNER_EMAIL.toLowerCase())
+  isOwner: () => owner || !!(user && OWNER_EMAIL && user.email && user.email.toLowerCase() === OWNER_EMAIL.toLowerCase())
 };
+
+/* ---------- owner check, owner settings, stats, who is online ---------- */
+let ownerP = null, owner = false;
+const checkOwner = () => {
+  if (!configured || !user) { owner = false; return Promise.resolve(false); }
+  if (!ownerP || ownerP.uid !== user.uid) {
+    const uid = user.uid;
+    ownerP = sb().then((c) => c.rpc('is_owner')).then(({ data }) => { owner = data === true; return owner; }).catch(() => false);
+    ownerP.uid = uid;
+  }
+  return ownerP;
+};
+const SKEY = 'klipu:settings';
+const emptySettings = () => ({ disabled: {}, announce: '' });
+async function loadSettings() {
+  if (!configured) return emptySettings();
+  try {
+    const c = await sb(); const { data, error } = await c.from('settings').select('key,value'); if (error) throw error;
+    const o = emptySettings();
+    for (const r of data) { if (r.key === 'disabled') o.disabled = r.value || {}; if (r.key === 'announce') o.announce = (r.value && r.value.text) || ''; }
+    safe(() => localStorage.setItem(SKEY, JSON.stringify(o))); return o;
+  } catch (e) { return safe(() => JSON.parse(localStorage.getItem(SKEY) || 'null'), null) || emptySettings(); }
+}
+const settingsP = loadSettings();
+const owned = {
+  async saveSettings(disabled, announce) {
+    const c = await sb(); const now = new Date().toISOString();
+    const { error } = await c.from('settings').upsert([{ key: 'disabled', value: disabled, updated_at: now }, { key: 'announce', value: { text: announce }, updated_at: now }], { onConflict: 'key' });
+    if (error) throw new Error('Could not save. Is the SQL for settings run, and are you logged in as the owner?');
+    safe(() => localStorage.removeItem(SKEY));
+  },
+  async stats() {
+    const c = await sb(); const { data, error } = await c.from('stats').select('*').order('day', { ascending: false }).limit(60);
+    if (error) throw new Error('Could not read the numbers. Run the stats SQL first.'); return data;
+  }
+};
+async function bump(k, n) { if (!configured) return; try { const c = await sb(); await c.rpc('bump', { k, c: n || 1 }); } catch (e) { /* numbers are optional */ } }
+const today = new Date().toISOString().slice(0, 10);
+if (configured && page !== 'admin' && safe(() => localStorage.getItem('klipu:visit'), '') !== today) { safe(() => localStorage.setItem('klipu:visit', today)); bump('visit'); }
+
+const liveCbs = []; let chan = null, chanReady = false; const mine = { page, working: false };
+function startLive() {
+  if (!configured || chan) return;
+  sb().then((c) => {
+    chan = c.channel('klipu-live', { config: { presence: { key: Math.random().toString(36).slice(2) + Date.now().toString(36) } } });
+    chan.on('presence', { event: 'sync' }, () => liveCbs.forEach((f) => f(chan.presenceState())));
+    chan.subscribe((st) => { if (st === 'SUBSCRIBED') { chanReady = true; chan.track({ ...mine }); } });
+  }).catch(() => {});
+}
+const setWorking = (b) => { mine.working = !!b; if (chanReady) chan.track({ ...mine }); };
+const watchLive = (cb) => { liveCbs.push(cb); if (chan && chanReady) cb(chan.presenceState()); };
+startLive();
+
+/* announcement bar from the admin page */
+settingsP.then((st) => {
+  if (!st.announce) return;
+  const bar = document.createElement('div'); bar.className = 'ann'; bar.setAttribute('role', 'status'); bar.textContent = st.announce;
+  const h = document.getElementById('siteHeader'); if (h) h.after(bar);
+});
 
 /* ---------- search index for the 3-dots menu ---------- */
 const S = (title, where, url, words) => ({ title, where, url, words: (words || '') + ' ' + title });
@@ -239,4 +298,4 @@ if (gate && (page === 'app' || page === 'home')) {
   document.addEventListener('drop', (e) => { if (e.target.closest && e.target.closest('#drop')) guard(e, 'app.html'); }, true);
 }
 
-export const site = { configured, auth, reviews, esc, askReview, ready, get user() { return user; }, onUser(cb) { listeners.push(cb); cb(user); }, gate, page };
+export const site = { configured, checkOwner, settings: settingsP, owned, bump, setWorking, watchLive, get owner() { return owner; }, auth, reviews, esc, askReview, ready, get user() { return user; }, onUser(cb) { listeners.push(cb); cb(user); }, gate, page };
