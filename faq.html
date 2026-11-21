@@ -1,0 +1,50 @@
+<!doctype html>
+<html lang="en" data-theme="dark">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>FAQ · Klipu</title>
+<meta name="description" content="Answers to common questions about Klipu: clips, captions, languages, privacy, speed and troubleshooting.">
+<meta name="theme-color" content="#07080d">
+<link rel="icon" type="image/png" href="favicon.png">
+<link rel="apple-touch-icon" href="icon-192.png">
+<link rel="manifest" href="manifest.webmanifest">
+<script>try{var t=localStorage.getItem('klipu:theme');if(t)document.documentElement.dataset.theme=t}catch(e){}</script>
+<link rel="stylesheet" href="site.css">
+</head>
+<body data-page="faq">
+<main class="pg fq">
+  <h1>Questions and answers</h1>
+  <p class="lede">Everything people ask about Klipu. Use the search box, or pick a topic.</p>
+  <div class="fq-bar"><input id="q" type="search" placeholder="Search the questions" aria-label="Search the questions"><div class="fq-cats" id="cats"></div></div>
+  <div id="out"></div>
+  <p class="lede" style="margin-top:24px">Still stuck? Leave a note on the <a href="reviews.html" style="color:var(--accent-ink)">Reviews page</a>.</p>
+</main>
+<script type="module">
+import { site } from './site.js';
+import { FAQ } from './faq-data.js';
+const $ = (id) => document.getElementById(id), esc = site.esc;
+const cats = ['All', ...new Set(FAQ.map((f) => f[0]))];
+let cat = 'All';
+$('cats').innerHTML = cats.map((c) => `<button type="button" aria-pressed="${c === 'All'}" data-c="${esc(c)}">${esc(c)}</button>`).join('');
+function render() {
+  const t = $('q').value.toLowerCase().split(/\s+/).filter(Boolean);
+  let last = '', h = '', n = 0;
+  FAQ.forEach((f, i) => {
+    if (cat !== 'All' && f[0] !== cat) return;
+    const hay = (f[1] + ' ' + f[2] + ' ' + f[0]).toLowerCase();
+    if (!t.every((w) => hay.includes(w))) return;
+    if (f[0] !== last) { h += `<div class="fq-cat">${esc(f[0])}</div>`; last = f[0]; }
+    h += `<details id="q-${i}"><summary>${esc(f[1])}</summary><p>${esc(f[2])}</p></details>`; n++;
+  });
+  $('out').innerHTML = n ? h : '<div class="none">No question matches. Try fewer words.</div>';
+  openHash();
+}
+function openHash() { const m = /^#q-(\d+)$/.exec(location.hash); if (!m) return; const d = document.getElementById('q-' + m[1]); if (d) { d.open = true; d.scrollIntoView({ block: 'center' }); } }
+$('q').oninput = render;
+$('cats').onclick = (e) => { const b = e.target.closest('button'); if (!b) return; cat = b.dataset.c; $('cats').querySelectorAll('button').forEach((x) => x.setAttribute('aria-pressed', String(x === b))); render(); };
+addEventListener('hashchange', () => { if (/^#q-/.test(location.hash)) { cat = 'All'; $('q').value = ''; render(); } });
+render();
+</script>
+</body>
+</html>

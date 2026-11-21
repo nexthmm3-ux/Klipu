@@ -1,0 +1,90 @@
+<!doctype html>
+<html lang="en" data-theme="dark">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Klipu app: make clips</title>
+<meta name="description" content="Choose a video and let Klipu cut captioned clips.">
+<meta name="theme-color" content="#07080d">
+<link rel="icon" type="image/png" href="favicon.png">
+<link rel="apple-touch-icon" href="icon-192.png">
+<link rel="manifest" href="manifest.webmanifest">
+<script>try{var t=localStorage.getItem('klipu:theme');if(t)document.documentElement.dataset.theme=t}catch(e){}</script>
+<link rel="stylesheet" href="site.css">
+</head>
+<body data-page="app">
+<main class="wrap" id="app">
+  <!-- AD SLOT (top). Fill PROMO.top in the script below, or paste ad network code inside the div under it. -->
+  <aside class="ad" id="adTop" hidden></aside>
+  <div id="adNetworkTop"></div>
+
+  <!-- PAGE 1: setup -->
+  <section class="panel" id="viewSetup" aria-label="Source and settings">
+    <div class="label">1 · Video</div>
+    <label class="drop" id="drop" tabindex="0">
+      <input type="file" id="file" accept="video/*">
+      <b id="fname">Choose a video file</b>
+      <span id="fmeta">or drop it here. English speech works best.</span>
+    </label>
+    <div class="label">2 · Settings</div>
+    <div class="opts">
+      <div class="opt"><label class="label" for="len">Clip length</label>
+        <select id="len"><option value="30">About 30 seconds</option><option value="60" selected>About 1 minute</option></select></div>
+      <div class="opt"><label class="label" for="count">Number of clips</label>
+        <select id="count"><option value="1">1 (best one only)</option><option>3</option><option selected>5</option><option>8</option><option>10</option><option>15</option></select></div>
+      <div class="opt"><label class="label" for="lang">Language in the video</label>
+        <select id="lang"><option value="en">English</option><option value="hi">Hindi</option><option value="bn">Bengali</option><option value="auto">Other (auto-detect)</option></select></div>
+      <div class="opt"><label class="label" for="model">Speech model</label>
+        <select id="model"><option value="tiny">Fast (tiny)</option><option value="base">Better (base, slower)</option></select></div>
+      <div class="opt"><label class="label" for="quality">Clip quality</label>
+        <select id="quality"><option value="light" selected>Light 540p: smooth, small files</option><option value="hd">HD 720p: sharper, heavier</option></select></div>
+      <div class="opt"><label class="label" for="speed">Speed</label>
+        <select id="speed"><option value="safe" selected>Safe: smooth phone (recommended)</option><option value="balanced">Balanced: 2 helpers, phone may slow down</option><option value="fast">Fast: strong phones / laptops only</option></select></div>
+    </div>
+    <div class="label">Shape of the clip</div>
+    <input type="hidden" id="fmt" value="orig"><div class="pick" id="pickFmt"></div>
+    <div class="label">Framing (when the shape is not "Same as video")</div>
+    <input type="hidden" id="frame" value="follow"><div class="pick" id="pickFrame"></div>
+    <div class="label">Template (only for the vertical 9:16 shape)</div>
+    <input type="hidden" id="tpl" value="none"><div class="pick" id="pickTpl"></div>
+    <div class="row" id="tplFields" style="gap:10px"><label class="opt" style="flex:1 1 150px"><span class="label">Name on the template</span><input type="text" id="tplName" maxlength="30" placeholder="Your Name" style="font:inherit;color:var(--fg);background:var(--bg);border:1px solid var(--line);border-radius:6px;padding:9px 10px;width:100%"></label><label class="opt" style="flex:1 1 150px"><span class="label">Handle</span><input type="text" id="tplHandle" maxlength="30" placeholder="@yourhandle" style="font:inherit;color:var(--fg);background:var(--bg);border:1px solid var(--line);border-radius:6px;padding:9px 10px;width:100%"></label></div>
+    <div class="label">Top line (topic + hook)</div>
+    <input type="hidden" id="top" value="hook"><div class="pick" id="pickTop"></div>
+    <div class="label">Caption style</div>
+    <input type="hidden" id="capstyle" value="pop"><div class="pick" id="pickCap"></div>
+    <div class="note">Hindi, Bengali and other languages use the bigger speech engine (about 150 MB the first time). Pick "Better (base)" for them, because the tiny one makes many mistakes. If the page crashes, choose Safe and close other tabs.</div>
+    <div class="row">
+      <button class="primary" id="go" disabled>Make my clips</button>
+      <span class="note">Keep this tab open with the screen on and the phone plugged in. The first run downloads the speech model once and needs internet.</span>
+    </div>
+  </section>
+
+  <!-- PAGE 2: work bench -->
+  <div id="viewWork" hidden style="display:flex;flex-direction:column;gap:14px">
+    <section class="panel" aria-live="polite">
+      <div class="label" id="stepLabel">Step 1 of 2</div>
+      <div class="stage" id="stageTxt">Starting…</div>
+      <div class="bar"><i id="barFill"></i></div>
+      <div class="stat" id="elapsed"></div>
+      <div class="err" id="errTxt" hidden></div>
+      <div class="row"><button class="ghost" id="back" hidden>Start over</button></div>
+    </section>
+
+    <video id="pv" controls playsinline hidden></video>
+    <div class="slots" id="slots"></div>
+
+    <section class="panel game" aria-label="Game">
+      <div class="head"><h2>Play while you wait</h2><span class="stat" id="gameScore">Level 1 · Score 0 · Best 0</span></div>
+      <canvas id="game" tabindex="0" aria-label="Tap to make the bird fly between the pillars"></canvas>
+      <div class="badges" id="badges" aria-label="Achievements"></div>
+      <span class="note">Tap the game, or press Space, to fly. Every 5 pillars is a new level with a new badge. From score 10, shield and boost orbs appear in the gaps.</span>
+    </section>
+  </div>
+
+  <!-- AD SLOT (bottom) -->
+  <aside class="ad" id="adBottom" hidden></aside>
+</main>
+<canvas id="stage" class="offscreen" aria-hidden="true"></canvas>
+<script type="module" src="app.js"></script>
+</body>
+</html>
